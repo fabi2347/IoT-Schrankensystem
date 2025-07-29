@@ -1,0 +1,56 @@
+[
+  {
+    "id": "8",
+    "uid": "13386200",
+    "timestamp": "27.06.2025 17:30:19",
+    "status": "Unzul\u00e4ssige Zugangszeit",
+    "reason": "NFC"
+  },
+  {
+    "id": "7",
+    "timestamp": "27.06.2025 17:30:10",
+    "status": "Geschlossen",
+    "reason": "Manuell"
+  },
+  {
+    "id": "6",
+    "timestamp": "27.06.2025 17:29:56",
+    "status": "Ge\u00f6ffnet",
+    "reason": "Manuell"
+  },
+  {
+    "id": "5",
+    "uid": "86b8c33b",
+    "timestamp": "27.06.2025 17:29:52",
+    "status": "Nicht registriert",
+    "reason": "NFC"
+  },
+  {
+    "id": "4",
+    "uid": "ed89fa30",
+    "timestamp": "27.06.2025 17:29:38",
+    "status": "Geschlossen",
+    "reason": "Automatisch (NFC)"
+  },
+  {
+    "id": "3",
+    "uid": "ed89fa30",
+    "timestamp": "27.06.2025 17:29:28",
+    "status": "Ge\u00f6ffnet",
+    "reason": "NFC"
+  },
+  {
+    "id": "2",
+    "uid": "ed89fa30",
+    "timestamp": "27.06.2025 17:29:09",
+    "status": "Nicht registriert",
+    "reason": "NFC"
+  },
+  {
+    "id": "1",
+    "uid": "13386200",
+    "timestamp": "27.06.2025 17:28:56",
+    "status": "Unzul\u00e4ssige Zugangszeit",
+    "reason": "NFC"
+  }
+]

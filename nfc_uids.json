@@ -1,0 +1,14 @@
+{
+  "allowed_uids": {
+    "13386200": {
+      "name": "Hausmeister",
+      "from": "10:00",
+      "to": "11:00"
+    },
+    "ed89fa30": {
+      "name": "Eigent\u00fcmer",
+      "from": "",
+      "to": ""
+    }
+  }
+}
