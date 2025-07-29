@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Schrankensteuerung - Admin</title>
+    <title>Admin - Schrankensteuerungssystem</title>
     <!-- Import aller CSS und JS Dateien (Tailwind CSS Framework und Axios JS HTTP(s)-Framework) -->
     <link href="/static/css/tailwind.min.css" rel="stylesheet">
     <link href="/static/css/font-awesome.min.css" rel="stylesheet">
@@ -15,6 +15,10 @@
         }
         .modal {
             transition: opacity 0.3s ease;
+        }
+        .time-input {
+            width: 80px;
+            display: inline-block;
         }
     </style>
 </head>
@@ -68,6 +72,48 @@
         </div>
     </div>
 
+    <!-- Bearbeitungsfenster für NFC UID Details -->
+    <div id="edit-uid-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden modal">
+        <div class="bg-white rounded-lg shadow-xl w-96">
+            <div class="flex justify-between items-center border-b p-4">
+                <h3 class="text-lg font-semibold">UID Details</h3>
+                <button onclick="closeModal('edit-uid-modal')" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="p-4">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="edit-uid-name">
+                        Name
+                    </label>
+                    <input id="edit-uid-name" type="text" class="px-4 py-2 border rounded w-full focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">
+                        Zugangszeit
+                    </label>
+                    <div class="flex items-center space-x-2">
+                        <input id="edit-uid-from" type="time" class="px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <span>bis</span>
+                        <input id="edit-uid-to" type="time" class="px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <button onclick="clearTimes()" class="px-3 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Leer lassen für uneingeschränkten Zugang</p>
+                </div>
+                <div class="flex justify-end space-x-2">
+                    <button onclick="closeModal('edit-uid-modal')" class="px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400">
+                        Abbrechen
+                    </button>
+                    <button id="confirm-edit-btn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                        Speichern
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="min-h-screen">
         <!-- Überschrift bzw. Website Header -->
         <header class="bg-blue-600 text-white shadow-md">
@@ -88,7 +134,7 @@
             </div>
 
             <!-- Statusanzeigen -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8" id="stats-container">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8" id="stats-container">
                 <!-- Elemente werden dynamisch per JavaScript eingefügt -->
             </div>
 
@@ -115,6 +161,8 @@
                             <thead class="bg-gray-50">
                                 <tr>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UID</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Zugangszeit</th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Aktionen</th>
                                 </tr>
                             </thead>
@@ -163,6 +211,8 @@
     <script>
         // Globale Variablen
         let currentUidToRemove = null;
+        let currentEditingUid = null;
+        let ALLOWED_UIDS = {};
 
         // Öffnungsfunktion für das Bestätigungsfenster
         function openModal(modalId) {
@@ -172,6 +222,12 @@
         // Schließfunktion für das Bestätigungsfenster
         function closeModal(modalId) {
             document.getElementById(modalId).classList.add('hidden');
+        }
+
+        // Zeiteingaben zurücksetzen
+        function clearTimes() {
+            document.getElementById('edit-uid-from').value = '';
+            document.getElementById('edit-uid-to').value = '';
         }
 
         // Website initialisieren
@@ -187,6 +243,7 @@
             document.getElementById('manual-close-btn').addEventListener('click', () => controlGate('close'));
             document.getElementById('add-uid-btn').addEventListener('click', addNfcUid);
             document.getElementById('clear-log-btn').addEventListener('click', () => openModal('confirm-clear-modal'));
+            document.getElementById('confirm-edit-btn').addEventListener('click', saveUidDetails);
             
             // Protokollliste löschen bestätigen
             document.getElementById('confirm-clear-btn').addEventListener('click', () => {
@@ -200,6 +257,13 @@
                 if (currentUidToRemove) {
                     removeNfcUid(currentUidToRemove);
                     currentUidToRemove = null;
+                }
+            });
+
+            // Enter-Taste für UID-Eingabe
+            document.getElementById('new-uid-input').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    addNfcUid();
                 }
             });
         });
@@ -281,6 +345,7 @@
             axios.get('/api/nfc_uids')
                 .then(response => {
                     if (response.data.success) {
+                        ALLOWED_UIDS = response.data.uids;
                         updateUidsTable(response.data.uids);
                     } else {
                         showMessage('Fehler beim Laden der UIDs', 'error');
@@ -315,34 +380,44 @@
             addBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Hinzufügen...';
             addBtn.disabled = true;
 
-            axios.post('/api/nfc_uids', { uid })
-                .then(response => {
-                    if (response.data.success) {
-                        showMessage('UID erfolgreich hinzugefügt', 'success');
-                        uidInput.value = '';
-                        loadNfcUids();
-                        loadData(); // NFC UID Liste aktualisieren, um das hinzugefügte Element anzuzeigen
-                    } else {
-                        showMessage(response.data.message || 'Fehler beim Hinzufügen', 'error');
-                    }
-                })
-                .catch(error => {
-                    if (error.response && error.response.data && error.response.data.message) {
-                        showMessage(error.response.data.message, 'error');
-                    } else {
-                        showMessage('Fehler beim Hinzufügen: ' + (error.message || 'Unbekannter Fehler'), 'error');
-                    }
-                })
-                .finally(() => {
-                    addBtn.innerHTML = '<i class="fas fa-plus mr-2"></i>Hinzufügen';
-                    addBtn.disabled = false;
-                });
+            axios.post('/api/nfc_uids', { 
+                uid,
+                name: "",
+                from: "",
+                to: ""
+            })
+            .then(response => {
+                if (response.data.success) {
+                    showMessage('UID erfolgreich hinzugefügt', 'success');
+                    uidInput.value = '';
+                    loadNfcUids(); // NFC UID Liste aktualisieren, um das hinzugefügte Element anzuzeigen
+                    currentEditingUid = uid;
+                    openEditUidModal(uid); // Bearbeitungsdialog für die neue UID öffnen
+                } else {
+                    showMessage(response.data.message || 'Fehler beim Hinzufügen', 'error');
+                }
+            })
+            .catch(error => {
+                if (error.response && error.response.data && error.response.data.message) {
+                    showMessage(error.response.data.message, 'error');
+                } else {
+                    showMessage('Fehler beim Hinzufügen: ' + (error.message || 'Unbekannter Fehler'), 'error');
+                }
+            })
+            .finally(() => {
+                addBtn.innerHTML = '<i class="fas fa-plus mr-2"></i>Hinzufügen';
+                addBtn.disabled = false;
+            });
         }
 
-        // Funktion um das Bestätigungsfenster für die Entfernung einer NFC UID
+        // Funktion um das Bestätigungsfenster für die Entfernung einer NFC UID anzuzeigen
         function promptRemoveNfcUid(uid) {
             currentUidToRemove = uid;
-            document.getElementById('remove-uid-message').textContent = `Soll die UID ${uid} wirklich entfernt werden?`;
+            const name = ALLOWED_UIDS[uid]?.name || '';
+            const message = name 
+                ? `Soll die UID ${uid} (${name}) wirklich entfernt werden?`
+                : `Soll die UID ${uid} wirklich entfernt werden?`;
+            document.getElementById('remove-uid-message').textContent = message;
             openModal('confirm-remove-modal');
         }
 
@@ -353,7 +428,7 @@
                     if (response.data.success) {
                         showMessage('UID erfolgreich entfernt', 'success');
                         loadNfcUids();
-                        loadData(); // NFC UID Liste aktualisieren, um das gelöschte Element zu verstecken
+                        loadData(); // NFC UID Liste aktualisieren, um das gelöschte Element aus der Liste zu entfernen
                     } else {
                         showMessage(response.data.message || 'Fehler beim Entfernen', 'error');
                     }
@@ -432,7 +507,7 @@
                 <div class="bg-white rounded-lg shadow p-6">
                     <div class="flex justify-between items-center">
                         <div>
-                            <p class="text-gray-500">Gesamt Operationen</p>
+                            <p class="text-gray-500">Gesamtoperationen</p>
                             <h3 class="text-2xl font-bold">${stats.total_operations}</h3>
                         </div>
                         <div class="bg-blue-100 p-3 rounded-full">
@@ -468,11 +543,23 @@
                 <div class="bg-white rounded-lg shadow p-6">
                     <div class="flex justify-between items-center">
                         <div>
-                            <p class="text-gray-500">Abgelehnt</p>
+                            <p class="text-gray-500">Nicht registriert</p>
                             <h3 class="text-2xl font-bold">${stats.denied_count}</h3>
                         </div>
                         <div class="bg-yellow-100 p-3 rounded-full">
                             <i class="fas fa-ban text-yellow-600"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="text-gray-500">Unzulässige Zugangszeit</p>
+                            <h3 class="text-2xl font-bold">${stats.invalid_time_count || 0}</h3>
+                        </div>
+                        <div class="bg-orange-100 p-3 rounded-full">
+                            <i class="fas fa-clock text-orange-600"></i>
                         </div>
                     </div>
                 </div>
@@ -490,9 +577,9 @@
                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
                             ${op.status === 'Geöffnet' ? 'bg-green-100 text-green-800' : 
                             op.status === 'Geschlossen' ? 'bg-red-100 text-red-800' : 
-                            op.status === 'UID hinzugefügt' ? 'bg-blue-100 text-blue-800' :
-                            op.status === 'UID entfernt' ? 'bg-purple-100 text-purple-800' :
-                            'bg-yellow-100 text-yellow-800'}">
+                            op.status === 'Unzulässige Zugangszeit' ? 'bg-yellow-100 text-yellow-800' :
+                            op.status === 'Nicht registriert' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800'}">
                             ${op.status}
                         </span>
                     </td>
@@ -504,10 +591,18 @@
 
         // Funktion um die Einträge der NFC UID Liste zu aktualisieren
         function updateUidsTable(uids) {
-            document.getElementById('uids-table-body').innerHTML = uids.map(uid => `
+            document.getElementById('uids-table-body').innerHTML = Object.entries(uids).map(([uid, details]) => `
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">${uid}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${details.name || '—'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${details.from && details.to ? `${details.from} - ${details.to}` : 'Immer'}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right space-x-2">
+                        <button onclick="openEditUidModal('${uid}')" 
+                                class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
+                            <i class="fas fa-edit mr-2"></i>Bearbeiten
+                        </button>
                         <button onclick="promptRemoveNfcUid('${uid}')" 
                                 class="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700">
                             <i class="fas fa-trash-alt mr-2"></i>Entfernen
@@ -515,6 +610,60 @@
                     </td>
                 </tr>
             `).join('');
+        }
+
+        // Funktion um den Bearbeitungsdialog für eine UID zu öffnen
+        function openEditUidModal(uid) {
+            currentEditingUid = uid;
+            const details = ALLOWED_UIDS[uid] || {};
+            
+            document.getElementById('edit-uid-name').value = details.name || '';
+            document.getElementById('edit-uid-from').value = details.from || '';
+            document.getElementById('edit-uid-to').value = details.to || '';
+            
+            openModal('edit-uid-modal');
+        }
+
+        // Funktion um die UID-Details zu speichern
+        function saveUidDetails() {
+            if (!currentEditingUid) return;
+            
+            const name = document.getElementById('edit-uid-name').value.trim();
+            const timeFrom = document.getElementById('edit-uid-from').value;
+            const timeTo = document.getElementById('edit-uid-to').value;
+            
+            // Zeiten überprüfen
+            if ((timeFrom && !timeTo) || (!timeFrom && timeTo)) {
+                showMessage('Bitte beide Zeiten angeben oder beide leer lassen', 'error');
+                return;
+            }
+            
+            const btn = document.getElementById('confirm-edit-btn');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Speichert...';
+            btn.disabled = true;
+            
+            axios.patch('/api/nfc_uids', { 
+                uid: currentEditingUid,
+                name,
+                from: timeFrom,
+                to: timeTo
+            })
+            .then(response => {
+                if (response.data.success) {
+                    showMessage('UID Details erfolgreich aktualisiert', 'success');
+                    closeModal('edit-uid-modal');
+                    loadNfcUids();
+                } else {
+                    showMessage(response.data.message || 'Fehler beim Aktualisieren', 'error');
+                }
+            })
+            .catch(error => {
+                showMessage('Fehler beim Speichern: ' + (error.message || 'Unbekannter Fehler'), 'error');
+            })
+            .finally(() => {
+                btn.innerHTML = '<i class="fas fa-save mr-2"></i>Speichern';
+                btn.disabled = false;
+            });
         }
     </script>
 </body>
