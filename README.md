@@ -1,4 +1,4 @@
-# 📡 IoT Schrankensystem
+# IoT Schrankensystem
 
 ## 🔎 Projektbeschreibung
 
