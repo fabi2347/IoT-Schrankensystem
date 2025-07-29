@@ -31,7 +31,7 @@ def load_operations():
 def save_operations(operations_list):
     try:
         with open(OPERATIONS_FILE, 'w+') as file:
-            json.dump(operations_list, file, indent=2) # Verbesserte Lesbarkeit durch indent=2
+            json.dump(operations_list, file, indent=2)
     except Exception as e:
         print(f"Error: {e}")
 
@@ -41,16 +41,19 @@ def load_nfc_uids():
         if os.path.exists(NFC_UIDS_FILE):
             with open(NFC_UIDS_FILE, 'r+') as file:
                 data = json.load(file)
-                return set(data.get('allowed_uids', []))
+                # Convert old format (list) to new format (dict with metadata)
+                if isinstance(data.get('allowed_uids', None), list):
+                    return {uid: {"name": "", "from": "", "to": ""} for uid in data['allowed_uids']}
+                return data.get('allowed_uids', {})
     except Exception as e:
         print(f"Error: {e}")
-    return set()
+    return {}
 
 # Funktion um die NFC UID Liste zu speichern und serialisieren
 def save_nfc_uids(uids):
     try:
         with open(NFC_UIDS_FILE, 'w+') as file:
-            json.dump({'allowed_uids': list(uids)}, file, indent=2)
+            json.dump({'allowed_uids': uids}, file, indent=2)
     except Exception as e:
         print(f"Error: {e}")
 
@@ -86,6 +89,7 @@ def calculate_duration(open_time_str, close_time_str):
 def sort_operations_by_id(operations_list, reverse=False):
     return sorted(operations_list, key=lambda op: int(op['id']), reverse=reverse)
 
+# Funktion um die Protokollliste zu verarbeiten
 def process_operations(operations_list):
     processed_operations = []
     open_operations = {}
@@ -149,6 +153,7 @@ def get_statistics(operations_list):
         "open_count": len([op for op in past_operations if op["status"] == "Geöffnet"]),
         "closed_count": len([op for op in past_operations if op["status"] == "Geschlossen"]),
         "denied_count": len([op for op in past_operations if op["status"] == "Nicht registriert"]),
+        "invalid_time_count": len([op for op in past_operations if op["status"] == "Unzulässige Zugangszeit"]),
         "last_operation": past_operations[0] if past_operations else None
     }
 
@@ -258,8 +263,8 @@ def clear_log():
             "message": f"Fehler beim Löschen des Protokolls: {str(e)}"
         }), 500
 
-# API-Endpunkt für das Management der NFC UID's (auslesen, hinzufügen, löschen)
-@app.route('/api/nfc_uids', methods=['GET', 'POST', 'DELETE'])
+# API-Endpunkt für das Management der NFC UID's (auslesen, hinzufügen, löschen, bearbeiten)
+@app.route('/api/nfc_uids', methods=['GET', 'POST', 'DELETE', 'PATCH'])
 def manage_nfc_uids():
     if request.method == 'GET':
         global ALLOWED_UIDS
@@ -267,12 +272,15 @@ def manage_nfc_uids():
         
         return jsonify({
             "success": True,
-            "uids": list(ALLOWED_UIDS)
+            "uids": ALLOWED_UIDS
         })
     
     elif request.method == 'POST':
         data = request.get_json()
         uid = data.get('uid')
+        name = data.get('name', "")
+        time_from = data.get('from', "")
+        time_to = data.get('to', "")
 
         if not uid:
             return jsonify({"success": False, "message": "UID ist erforderlich"}), 400
@@ -287,11 +295,38 @@ def manage_nfc_uids():
         if uid in ALLOWED_UIDS:
             return jsonify({"success": False, "message": "UID existiert bereits"}), 400
 
-        ALLOWED_UIDS.add(uid)
+        ALLOWED_UIDS[uid] = {
+            "name": name,
+            "from": time_from,
+            "to": time_to
+        }
         save_nfc_uids(ALLOWED_UIDS)
 
         ALLOWED_UIDS = load_nfc_uids()
         return jsonify({"success": True, "message": "UID erfolgreich hinzugefügt"})
+    
+    elif request.method == 'PATCH':
+        data = request.get_json()
+        uid = data.get('uid')
+        name = data.get('name', "")
+        time_from = data.get('from', "")
+        time_to = data.get('to', "")
+
+        if not uid:
+            return jsonify({"success": False, "message": "UID ist erforderlich"}), 400
+
+        if uid not in ALLOWED_UIDS:
+            return jsonify({"success": False, "message": "UID nicht gefunden"}), 404
+
+        ALLOWED_UIDS[uid] = {
+            "name": name,
+            "from": time_from,
+            "to": time_to
+        }
+        save_nfc_uids(ALLOWED_UIDS)
+
+        ALLOWED_UIDS = load_nfc_uids()
+        return jsonify({"success": True, "message": "UID erfolgreich aktualisiert"})
         
     elif request.method == 'DELETE':
         data = request.get_json()
@@ -303,7 +338,7 @@ def manage_nfc_uids():
         if uid not in ALLOWED_UIDS:
             return jsonify({"success": False, "message": "UID nicht gefunden"}), 404
 
-        ALLOWED_UIDS.remove(uid)
+        ALLOWED_UIDS.pop(uid)
         save_nfc_uids(ALLOWED_UIDS)
         
         ALLOWED_UIDS = load_nfc_uids()
@@ -324,6 +359,23 @@ def nfc_access():
 
         current_status, _ = get_current_gate_status()
         access_granted = uid in ALLOWED_UIDS
+        time_restriction_failed = False
+        
+        # Zeitbeschränkungen prüfen
+        if access_granted:
+            uid_data = ALLOWED_UIDS[uid]
+            time_from = uid_data.get('from')
+            time_to = uid_data.get('to')
+            if time_from and time_to:
+                try:
+                    now = datetime.now().time()
+                    from_time = datetime.strptime(time_from, "%H:%M").time()
+                    to_time = datetime.strptime(time_to, "%H:%M").time()
+                    if not (from_time <= now <= to_time):
+                        access_granted = False
+                        time_restriction_failed = True
+                except ValueError:
+                    pass
 
         # Prüfen, ob die Schranke schon geöffnet ist
         if access_granted and current_status == 'Geöffnet':
@@ -333,20 +385,28 @@ def nfc_access():
         last_id = int(operations[0]['id']) if operations else 0
         new_id = str(last_id + 1)
 
+        # Status für das Protokoll bestimmen
+        if time_restriction_failed:
+            status = "Unzulässige Zugangszeit"
+        elif not access_granted:
+            status = "Nicht registriert"
+        else:
+            status = "Geöffnet"
+
         # Eintrag in das Protokoll einfügen
         new_entry = {
             "id": new_id,
             "uid": uid,
             "timestamp": now,
-            "status": "Geöffnet" if access_granted else "Nicht registriert",
+            "status": status,
             "reason": "NFC"
         }
 
         operations.insert(0, new_entry)
         save_operations(operations)
 
-        if access_granted:
-            # Zugang nur, wenn die Schranke nicht schon offen ist
+        if access_granted and not time_restriction_failed:
+            # Nur schließen, wenn Zugang erlaubt war
             def close_gate():
                 current_status, _ = get_current_gate_status()
                 if current_status == 'Geschlossen':
