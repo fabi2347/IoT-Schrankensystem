@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schrankensteuerung - Admin</title>
+    <!-- Import aller CSS und JS Dateien (Tailwind CSS Framework und Axios JS HTTP(s)-Framework) -->
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/font-awesome.min.css" rel="stylesheet">
+    <script src="/static/js/axios.min.js"></script>
+    <style>
+        /* Extra CSS-Code für die Bestätigungsfenster */
+        .hidden {
+            display: none;
+        }
+        .modal {
+            transition: opacity 0.3s ease;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <!-- Benachrichtigungsmitteilung -->
+    <div id="message-container" class="fixed top-4 right-4 w-80 z-50 space-y-2"></div>
+
+    <!-- Logs löschen Bestätigungsfenster -->
+    <div id="confirm-clear-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden modal">
+        <div class="bg-white rounded-lg shadow-xl w-96">
+            <div class="flex justify-between items-center border-b p-4">
+                <h3 class="text-lg font-semibold">Bestätigung</h3>
+                <button onclick="closeModal('confirm-clear-modal')" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="p-4">
+                <p class="mb-4">Soll das Protokoll wirklich gelöscht werden?</p>
+                <div class="flex justify-end space-x-2">
+                    <button onclick="closeModal('confirm-clear-modal')" class="px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400">
+                        Nein
+                    </button>
+                    <button id="confirm-clear-btn" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+                        Ja
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bestätigungsfenster beim Löschen einer NFC UID -->
+    <div id="confirm-remove-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden modal">
+        <div class="bg-white rounded-lg shadow-xl w-96">
+            <div class="flex justify-between items-center border-b p-4">
+                <h3 class="text-lg font-semibold">Bestätigung</h3>
+                <button onclick="closeModal('confirm-remove-modal')" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="p-4">
+                <p class="mb-4" id="remove-uid-message">Soll diese UID wirklich entfernt werden?</p>
+                <div class="flex justify-end space-x-2">
+                    <button onclick="closeModal('confirm-remove-modal')" class="px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400">
+                        Nein
+                    </button>
+                    <button id="confirm-remove-btn" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+                        Ja
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="min-h-screen">
+        <!-- Überschrift bzw. Website Header -->
+        <header class="bg-blue-600 text-white shadow-md">
+            <div class="container mx-auto px-4 py-4">
+                <h1 class="text-2xl font-bold">Schrankensteuerungssystem</h1>
+            </div>
+        </header>
+
+        <main class="container mx-auto px-4 py-8">
+            <!-- Steuerungsbuttons für manuelles öffnen/schließen -->
+            <div class="flex space-x-4 mb-8">
+                <button id="manual-open-btn" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                    <i class="fas fa-door-open mr-2"></i>Manuell öffnen
+                </button>
+                <button id="manual-close-btn" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+                    <i class="fas fa-door-closed mr-2"></i>Manuell schließen
+                </button>
+            </div>
+
+            <!-- Statusanzeigen -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8" id="stats-container">
+                <!-- Elemente werden dynamisch per JavaScript eingefügt -->
+            </div>
+
+            <!-- NFC UID Verwaltungsblock -->
+            <div class="bg-white rounded-lg shadow overflow-hidden mb-8">
+                <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                    <h2 class="text-xl font-semibold">NFC UID Verwaltung</h2>
+                    <div class="space-x-2">
+                        <button id="refresh-uids-btn" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
+                            <i class="fas fa-sync-alt mr-2"></i>Aktualisieren
+                        </button>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div class="flex mb-4">
+                        <input type="text" id="new-uid-input" placeholder="Neue NFC UID" 
+                               class="px-4 py-2 border rounded-l focus:outline-none focus:ring-2 focus:ring-blue-500 flex-grow">
+                        <button id="add-uid-btn" class="px-4 py-2 bg-green-600 text-white rounded-r hover:bg-green-700">
+                            <i class="fas fa-plus mr-2"></i>Hinzufügen
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UID</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Aktionen</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200" id="uids-table-body">
+                                <!-- Elemente werden dynamisch per JavaScript eingefügt -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Protokolltabelle -->
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                    <h2 class="text-xl font-semibold">Protokoll</h2>
+                    <div class="space-x-2">
+                        <button id="refresh-btn" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
+                            <i class="fas fa-sync-alt mr-2"></i>Aktualisieren
+                        </button>
+                        <button id="clear-log-btn" class="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700">
+                            <i class="fas fa-trash-alt mr-2"></i>Protokoll löschen
+                        </button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NFC UID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Zeitpunkt</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Typ</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dauer (Sek.)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200" id="operations-table-body">
+                            <!-- Elemente werden dynamisch per JavaScript eingefügt -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Globale Variablen
+        let currentUidToRemove = null;
+
+        // Öffnungsfunktion für das Bestätigungsfenster
+        function openModal(modalId) {
+            document.getElementById(modalId).classList.remove('hidden');
+        }
+
+        // Schließfunktion für das Bestätigungsfenster
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
+
+        // Website initialisieren
+        document.addEventListener('DOMContentLoaded', function() {
+            loadData();
+            loadNfcUids();
+            setInterval(loadData, 3000);
+            
+            // Eventlisteners
+            document.getElementById('refresh-btn').addEventListener('click', loadData);
+            document.getElementById('refresh-uids-btn').addEventListener('click', loadNfcUids);
+            document.getElementById('manual-open-btn').addEventListener('click', () => controlGate('open'));
+            document.getElementById('manual-close-btn').addEventListener('click', () => controlGate('close'));
+            document.getElementById('add-uid-btn').addEventListener('click', addNfcUid);
+            document.getElementById('clear-log-btn').addEventListener('click', () => openModal('confirm-clear-modal'));
+            
+            // Protokollliste löschen bestätigen
+            document.getElementById('confirm-clear-btn').addEventListener('click', () => {
+                closeModal('confirm-clear-modal');
+                clearLog();
+            });
+            
+            // NFC UID löschen bestätigen
+            document.getElementById('confirm-remove-btn').addEventListener('click', () => {
+                closeModal('confirm-remove-modal');
+                if (currentUidToRemove) {
+                    removeNfcUid(currentUidToRemove);
+                    currentUidToRemove = null;
+                }
+            });
+        });
+
+        // Funktion um eine Benachrichtigung auf der Website anzuzeigen (oben rechts)
+        function showMessage(message, type = 'info') {
+            const colors = {
+                success: 'bg-green-100 border-green-400 text-green-700',
+                error: 'bg-red-100 border-red-400 text-red-700',
+                info: 'bg-blue-100 border-blue-400 text-blue-700',
+                warning: 'bg-yellow-100 border-yellow-400 text-yellow-700'
+            };
+            
+            const icon = {
+                success: 'fa-check-circle',
+                error: 'fa-times-circle',
+                info: 'fa-info-circle',
+                warning: 'fa-exclamation-circle'
+            };
+            
+            const container = document.getElementById('message-container');
+            const messageId = 'msg-' + Date.now();
+            
+            const messageElement = document.createElement('div');
+            messageElement.id = messageId;
+            messageElement.className = `border-l-4 p-4 ${colors[type]} rounded shadow-lg relative`;
+            messageElement.innerHTML = `
+                <div class="flex items-start">
+                    <div class="flex-shrink-0">
+                        <i class="fas ${icon[type]}"></i>
+                    </div>
+                    <div class="ml-3 flex-1">
+                        <p class="text-sm">${message}</p>
+                    </div>
+                    <div class="ml-4 flex-shrink-0">
+                        <button onclick="document.getElementById('${messageId}').remove()" 
+                                class="text-gray-500 hover:text-gray-700 focus:outline-none">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            container.appendChild(messageElement);
+            
+            // Benachrichtigung nach 3 Sekunden löschen
+            setTimeout(() => {
+                const elem = document.getElementById(messageId);
+                if (elem) elem.remove();
+            }, 3000);
+        }
+
+        // Funktion um Daten der Protokollliste zu laden
+        function loadData() {
+            const refreshBtn = document.getElementById('refresh-btn');
+            refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Lädt...';
+            refreshBtn.disabled = true;
+
+            axios.get('/api/operations')
+                .then(response => {
+                    updateStats(response.data.stats);
+                    updateOperationsTable(response.data.operations);
+                })
+                .catch(error => {
+                    showMessage('Fehler beim Laden der Daten: ' + (error.message || 'Unbekannter Fehler'), 'error');
+                })
+                .finally(() => {
+                    refreshBtn.innerHTML = '<i class="fas fa-sync-alt mr-2"></i>Aktualisieren';
+                    refreshBtn.disabled = false;
+                });
+        }
+
+        // Funktion um Daten der zugelassenen NFC UIDs zu laden
+        function loadNfcUids() {
+            const refreshBtn = document.getElementById('refresh-uids-btn');
+            refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Lädt...';
+            refreshBtn.disabled = true;
+
+            axios.get('/api/nfc_uids')
+                .then(response => {
+                    if (response.data.success) {
+                        updateUidsTable(response.data.uids);
+                    } else {
+                        showMessage('Fehler beim Laden der UIDs', 'error');
+                    }
+                })
+                .catch(error => {
+                    showMessage('Fehler beim Laden der UIDs: ' + (error.message || 'Unbekannter Fehler'), 'error');
+                })
+                .finally(() => {
+                    refreshBtn.innerHTML = '<i class="fas fa-sync-alt mr-2"></i>Aktualisieren';
+                    refreshBtn.disabled = false;
+                });
+        }
+
+        // Funktion um NFC UID zur Liste hinzuzufügen
+        function addNfcUid() {
+            const uidInput = document.getElementById('new-uid-input');
+            const uid = uidInput.value.trim();
+            const addBtn = document.getElementById('add-uid-btn');
+
+            if (!uid) {
+                showMessage('Bitte eine UID eingeben', 'error');
+                return;
+            }
+
+            // Clientseitige Überprüfung der NFC UID zum Schutz vor XSS (Cross-Site Scripting)
+            if (!/^[a-zA-Z0-9]+$/.test(uid)) {
+                showMessage('UID darf nur Buchstaben und Zahlen enthalten (keine Sonderzeichen oder Leerzeichen)', 'error');
+                return;
+            }
+
+            addBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Hinzufügen...';
+            addBtn.disabled = true;
+
+            axios.post('/api/nfc_uids', { uid })
+                .then(response => {
+                    if (response.data.success) {
+                        showMessage('UID erfolgreich hinzugefügt', 'success');
+                        uidInput.value = '';
+                        loadNfcUids();
+                        loadData(); // NFC UID Liste aktualisieren, um das hinzugefügte Element anzuzeigen
+                    } else {
+                        showMessage(response.data.message || 'Fehler beim Hinzufügen', 'error');
+                    }
+                })
+                .catch(error => {
+                    if (error.response && error.response.data && error.response.data.message) {
+                        showMessage(error.response.data.message, 'error');
+                    } else {
+                        showMessage('Fehler beim Hinzufügen: ' + (error.message || 'Unbekannter Fehler'), 'error');
+                    }
+                })
+                .finally(() => {
+                    addBtn.innerHTML = '<i class="fas fa-plus mr-2"></i>Hinzufügen';
+                    addBtn.disabled = false;
+                });
+        }
+
+        // Funktion um das Bestätigungsfenster für die Entfernung einer NFC UID
+        function promptRemoveNfcUid(uid) {
+            currentUidToRemove = uid;
+            document.getElementById('remove-uid-message').textContent = `Soll die UID ${uid} wirklich entfernt werden?`;
+            openModal('confirm-remove-modal');
+        }
+
+        // Funktion zum Entfernen einer NFC UID
+        function removeNfcUid(uid) {
+            axios.delete('/api/nfc_uids', { data: { uid } })
+                .then(response => {
+                    if (response.data.success) {
+                        showMessage('UID erfolgreich entfernt', 'success');
+                        loadNfcUids();
+                        loadData(); // NFC UID Liste aktualisieren, um das gelöschte Element zu verstecken
+                    } else {
+                        showMessage(response.data.message || 'Fehler beim Entfernen', 'error');
+                    }
+                })
+                .catch(error => {
+                    if (error.response && error.response.data && error.response.data.message) {
+                        showMessage(error.response.data.message, 'error');
+                    } else {
+                        showMessage('Fehler beim Entfernen: ' + (error.message || 'Unbekannter Fehler'), 'error');
+                    }
+                });
+        }
+
+        // Funktion um die Protokollliste zu löschen
+        function clearLog() {
+            const clearBtn = document.getElementById('clear-log-btn');
+            clearBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Löscht...';
+            clearBtn.disabled = true;
+            
+            axios.post('/api/clear_log')
+                .then(response => {
+                    if (response.data.success) {
+                        showMessage('Protokoll erfolgreich gelöscht', 'success');
+                        loadData();
+                    } else {
+                        showMessage(response.data.message || 'Fehler beim Löschen', 'error');
+                    }
+                })
+                .catch(error => {
+                    showMessage('Fehler beim Löschen: ' + (error.message || 'Unbekannter Fehler'), 'error');
+                })
+                .finally(() => {
+                    clearBtn.innerHTML = '<i class="fas fa-trash-alt mr-2"></i>Protokoll löschen';
+                    clearBtn.disabled = false;
+                });
+        }
+
+        // Funktion um die Schranke per API-Anfrage zu öffnen/schließen
+        function controlGate(action) {
+            const btn = document.getElementById(`manual-${action}-btn`);
+            const originalText = btn.innerHTML;
+            
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Verarbeite...';
+            btn.disabled = true;
+
+            axios.post('/api/control', { action })
+                .then(response => {
+                    if (response.data.success) {
+                        showMessage(response.data.message, 'success');
+                        loadData();
+                    } else {
+                        const errorMessage = response.data.message || 'Unbekannter Fehler';
+                        showMessage(errorMessage, 'error');
+                    }
+                })
+                .catch(error => {
+                    if (error.response && error.response.status === 400 && error.response.data && error.response.data.message) {
+                        showMessage(error.response.data.message, 'error');
+                    } 
+                    else if (error.response && error.response.data && error.response.data.message) {
+                        showMessage(error.response.data.message, 'error');
+                    }
+                    else {
+                        showMessage('Netzwerkfehler: ' + (error.message || 'Unbekannter Fehler'), 'error');
+                    }
+                })
+                .finally(() => {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                });
+        }
+
+        // Funktion um die Daten der Statistik zu aktualisieren
+        function updateStats(stats) {
+            document.getElementById('stats-container').innerHTML = `
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="text-gray-500">Gesamt Operationen</p>
+                            <h3 class="text-2xl font-bold">${stats.total_operations}</h3>
+                        </div>
+                        <div class="bg-blue-100 p-3 rounded-full">
+                            <i class="fas fa-list text-blue-600"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="text-gray-500">Geöffnet</p>
+                            <h3 class="text-2xl font-bold">${stats.open_count}</h3>
+                        </div>
+                        <div class="bg-green-100 p-3 rounded-full">
+                            <i class="fas fa-arrow-up text-green-600"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="text-gray-500">Geschlossen</p>
+                            <h3 class="text-2xl font-bold">${stats.closed_count}</h3>
+                        </div>
+                        <div class="bg-red-100 p-3 rounded-full">
+                            <i class="fas fa-arrow-down text-red-600"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="text-gray-500">Abgelehnt</p>
+                            <h3 class="text-2xl font-bold">${stats.denied_count}</h3>
+                        </div>
+                        <div class="bg-yellow-100 p-3 rounded-full">
+                            <i class="fas fa-ban text-yellow-600"></i>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Funktion um die Einträge der Protokollliste zu aktualisieren
+        function updateOperationsTable(operations) {
+            document.getElementById('operations-table-body').innerHTML = operations.map(op => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${op.id}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-500">${op.uid || '—'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${op.timestamp}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                            ${op.status === 'Geöffnet' ? 'bg-green-100 text-green-800' : 
+                            op.status === 'Geschlossen' ? 'bg-red-100 text-red-800' : 
+                            op.status === 'UID hinzugefügt' ? 'bg-blue-100 text-blue-800' :
+                            op.status === 'UID entfernt' ? 'bg-purple-100 text-purple-800' :
+                            'bg-yellow-100 text-yellow-800'}">
+                            ${op.status}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${op.reason}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${op.duration || '—'}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Funktion um die Einträge der NFC UID Liste zu aktualisieren
+        function updateUidsTable(uids) {
+            document.getElementById('uids-table-body').innerHTML = uids.map(uid => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">${uid}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
+                        <button onclick="promptRemoveNfcUid('${uid}')" 
+                                class="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700">
+                            <i class="fas fa-trash-alt mr-2"></i>Entfernen
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+    </script>
+</body>
+</html>
