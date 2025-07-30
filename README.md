@@ -79,9 +79,9 @@ Das Webinterface erlaubt die zentrale Verwaltung von NFC-UIDs, das manuelle Steu
 
 ## 🛠️ Voraussetzungen
 
-- STM32 Mikrocontroller
-- ESP32 Modul mit WLAN-Funktion
+- STM32 L152RE Mikrocontroller
+- ESP32 NodeMCU D1 R32 Mikrocontroller mit WLAN-Funktion
 - RFID-RC522 NFC-Modul
 - SG90 Servomotor
 - LCD-Display (z. B. über I2C)
-- NFC-Tags
+- NFC-Tags/Karten
