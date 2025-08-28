@@ -16,20 +16,20 @@ Das Webinterface erlaubt die zentrale Verwaltung von NFC-UIDs, das manuelle Steu
 
 ## 🧩 Systemkomponenten
 
-### 🖥️ STM32 – Steuerungseinheit
+### 🖥️ STM32 (Steuerungseinheit)
 
 - **RFID-RC522 Modul**: Liest NFC-Tags und übergibt UID-Daten zur Prüfung
 - **SG90 Servomotor**: Öffnet und schließt die Schranke physisch
 - **LCD-Display**: Zeigt UID, Zugriffsstatus und Systeminformationen in Echtzeit an
 - Kommunikation mit ESP32 via **UART1** (serielle Verbindung) und eigener **JSON-Schnittstelle**
 
-### 🌐 ESP32 – Netzwerkbrücke
+### 🌐 ESP32 (Netzwerkbrücke)
 
 - Empfang der UID-Daten vom STM32
 - Weiterleitung der Anfrage an den Webserver per HTTP
 - Rückgabe der Antwort an STM32 zur Ausführung (z. B. Schranke öffnen)
 
-### 🌍 Webinterface – Zentrale Verwaltung
+### 🌍 Webinterface (Zentrale Verwaltung)
 
 - **Manuelle Schrankensteuerung** (Öffnen/Schließen)
 - **Verwaltung der NFC-UIDs**: Anzeigen, Hinzufügen, Bearbeiten, Entfernen
