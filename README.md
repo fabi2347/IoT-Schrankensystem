@@ -40,25 +40,25 @@ Das Webinterface erlaubt die zentrale Verwaltung von NFC-UIDs, das manuelle Steu
 
 ## ✅ Features
 
-- 🔓 Manuelles Öffnen der Schranke  
-- 🔐 Manuelles Schließen der Schranke  
-- 📈 Anzeige von Gesamtstatistiken:
+- Manuelles Öffnen der Schranke  
+- Manuelles Schließen der Schranke  
+- Anzeige von Gesamtstatistiken:
   - Anzahl Öffnungen
   - Anzahl Schließungen
   - Abgelehnte Versuche (ungültige UID / unzulässige Zeit)
-- 🆔 Anzeige aller zugelassenen NFC-UIDs  
-- ➕ Hinzufügen / Entfernen von UID-Einträgen  
-- 🧾 Details zu jeder UID:
+- Anzeige aller zugelassenen NFC-UIDs  
+- Hinzufügen / Entfernen von UID-Einträgen  
+- Details zu jeder UID:
   - Name (z. B. Besitzer)
   - Zugangszeiten (von – bis)
-- 🛠️ Bearbeiten und Löschen von UID-Daten
-- 📜 Zugriff auf vollständiges Protokoll:
+- Bearbeiten und Löschen von UID-Daten
+- Zugriff auf vollständiges Protokoll:
   - UID
   - Zeitpunkt
   - Status (Geöffnet, Geschlossen, Abgelehnt)
   - Typ (Manuell, NFC, Automatisch, Nicht registriert, Zeitbeschränkung)
   - Dauer der Öffnung
-- 🔄 Aktualisieren und Löschen des Protokolls
+- Aktualisieren und Löschen des Protokolls
 
 ---
 
