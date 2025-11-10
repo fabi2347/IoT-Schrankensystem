@@ -29,6 +29,13 @@ const long nfcOpenDuration = 10000;
 unsigned long nfcBlockTime = 0;
 const long nfcBlockDuration = 3000;
 
+// Hilfsfunktion um JSON Dokument zu serialisieren
+String serializeJsonDoc(DynamicJsonDocument& doc) {
+  String output;
+  serializeJson(doc, output);
+  return output;
+}
+
 // Funktion um Daten (als String/JSON) an den ESP32 zu senden
 void sendESP32(String msg) {
   Serial1C.println(msg);
@@ -252,15 +259,11 @@ void loop() {
       mfrc522.PCD_StopCrypto1();
 
       // Befehl serialisieren und an ESP32 senden
-      DynamicJsonDocument doc(2048);
+      DynamicJsonDocument doc(128);
       doc["type"] = "nfc";
       doc["uid"] = String(cardUID);
 
-      sendESP32(([] (DynamicJsonDocument& d) {
-        String s;
-        serializeJson(d, s);
-        return s;
-      })(doc));
+      sendESP32(serializeJsonDoc(doc));
     }
   }
 

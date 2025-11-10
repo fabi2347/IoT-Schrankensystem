@@ -22,6 +22,14 @@ unsigned long currentTime = millis();
 unsigned long previousTime = 0;
 const long timeoutTime = 2000;
 const String api_url = "http://192.168.43.151:5000/nfc";
+const int MAX_HEADER_SIZE = 1024;
+
+// Hilfsfunktion um JSON Dokument zu serialisieren
+String serializeJsonDoc(DynamicJsonDocument& doc) {
+  String output;
+  serializeJson(doc, output);
+  return output;
+}
 
 // Funktion um Daten (als als String/JSON) an den STM32 zu senden
 void sendSTM32(String msg) {
@@ -59,22 +67,18 @@ void setup() {
   String ip_address = WiFi.localIP().toString();
   Serial.println(ip_address);
 
-  DynamicJsonDocument doc(2048);
+  DynamicJsonDocument doc(256);
   doc["type"] = "connected";
   doc["ip"] = ip_address;
 
-  sendSTM32(([] (DynamicJsonDocument& d) {
-    String s;
-    serializeJson(d, s);
-    return s;
-  })(doc));
+  sendSTM32(serializeJsonDoc(doc));
 
   server.begin(); // Webserver starten
 }
 
 // Funktion um Servomotor Befehl als JSON zu serialisieren und an den STM32 zu senden
 void servo_cmd(bool auf, bool fromNFC) {
-  DynamicJsonDocument doc(2048);
+  DynamicJsonDocument doc(128);
   doc["type"] = "servo";
   if (auf) {
     doc["action"] = "auf";
@@ -85,11 +89,7 @@ void servo_cmd(bool auf, bool fromNFC) {
     doc["action"] = "zu";
   }
 
-  sendSTM32(([] (DynamicJsonDocument& d) {
-    String s;
-    serializeJson(d, s);
-    return s;
-  })(doc));
+  sendSTM32(serializeJsonDoc(doc));
 }
 
 // Funktion um die NFC UID an den Webserver zu senden, damit diese validiert werden kann
@@ -110,7 +110,7 @@ void sendUID(String uid) {
       Serial.println(response);
       if (httpResponseCode == 200) {
         // Antwort des Webservers deserialisieren
-        StaticJsonDocument<2048> doc;
+        StaticJsonDocument<256> doc;
         DeserializationError error = deserializeJson(doc, response);
 
         if (error) {
@@ -118,14 +118,10 @@ void sendUID(String uid) {
           Serial.println(error.c_str());
           
           // Netzwerkfehlernachricht an STM32 senden
-          DynamicJsonDocument errDoc(2048);
+          DynamicJsonDocument errDoc(128);
           errDoc["type"] = "nfc_error";
           errDoc["message"] = "Netzwerkfehler";
-          sendSTM32(([] (DynamicJsonDocument& d) {
-            String s;
-            serializeJson(d, s);
-            return s;
-          })(errDoc));
+          sendSTM32(serializeJsonDoc(errDoc));
           return;
         }
 
@@ -133,40 +129,28 @@ void sendUID(String uid) {
         servo_cmd(access, true);
         
         // Zugangsnachricht an STM32 senden
-        DynamicJsonDocument resultDoc(2048);
+        DynamicJsonDocument resultDoc(128);
         resultDoc["type"] = "nfc_result";
         resultDoc["access"] = access;
-        sendSTM32(([] (DynamicJsonDocument& d) {
-          String s;
-          serializeJson(d, s);
-          return s;
-        })(resultDoc));
+        sendSTM32(serializeJsonDoc(resultDoc));
       }
     } else {
       Serial.print("Fehler in der HTTP Anfrage: ");
       Serial.println(http.errorToString(httpResponseCode));
       // Netzwerkfehlernachricht an STM32 senden
-      DynamicJsonDocument errDoc(2048);
+      DynamicJsonDocument errDoc(128);
       errDoc["type"] = "nfc_error";
       errDoc["message"] = "Netzwerkfehler";
-      sendSTM32(([] (DynamicJsonDocument& d) {
-        String s;
-        serializeJson(d, s);
-        return s;
-      })(errDoc));
+      sendSTM32(serializeJsonDoc(errDoc));
     }
     http.end();
   } else {
     Serial.println("Nicht verbunden zum WLAN!");
     // Netzwerkfehlernachricht an STM32 senden
-    DynamicJsonDocument errDoc(2048);
+    DynamicJsonDocument errDoc(128);
     errDoc["type"] = "nfc_error";
     errDoc["message"] = "Netzwerkfehler";
-    sendSTM32(([] (DynamicJsonDocument& d) {
-      String s;
-      serializeJson(d, s);
-      return s;
-    })(errDoc));
+    sendSTM32(serializeJsonDoc(errDoc));
   }
 }
 
@@ -211,7 +195,10 @@ void loop() {
       if (client.available()) {
         char c = client.read();
         Serial.write(c);
-        header += c;
+        // Prevent header from growing too large
+        if (header.length() < MAX_HEADER_SIZE) {
+          header += c;
+        }
         if (c == '\n') {
           if (currentLine.length() == 0) {
             if (header.indexOf("GET /42697474652031352050756E6B7465203A29/schranke/auf") >= 0) {

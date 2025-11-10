@@ -91,34 +91,26 @@ def sort_operations_by_id(operations_list, reverse=False):
 
 # Funktion um die Protokollliste zu verarbeiten
 def process_operations(operations_list):
-    processed_operations = []
-    open_operations = {}
+    # Sort once at the beginning
     sorted_operations = sort_operations_by_id(operations_list)
-
+    
+    # Create a lookup dictionary for close operations to avoid O(n²) nested loop
+    close_operations_by_id = {}
     for operation in sorted_operations:
-        operation_copy = operation.copy()
-        
-        if 'uid' not in operation_copy:
-            operation_copy['uid'] = "—"
-        
-        if operation['status'] == "Geöffnet":
-            open_operations[operation['id']] = operation_copy
-            processed_operations.append(operation_copy)
-        else:
-            processed_operations.append(operation_copy)
-
+        if operation['status'] == "Geschlossen":
+            close_operations_by_id[operation['id']] = operation
+    
     final_operations = []
-    for operation in sort_operations_by_id(processed_operations, reverse=True):
+    # Process in reverse order (most recent first)
+    for operation in reversed(sorted_operations):
         operation_with_duration = operation.copy()
+        
+        if 'uid' not in operation_with_duration:
+            operation_with_duration['uid'] = "—"
         
         if operation['status'] == "Geöffnet":
             corr_close_id = str(int(operation['id']) + 1)
-            close_operation = None
-
-            for op in processed_operations:
-                if op['id'] == corr_close_id and op['status'] == "Geschlossen":
-                    close_operation = op
-                    break
+            close_operation = close_operations_by_id.get(corr_close_id)
             
             if close_operation:
                 duration = calculate_duration(operation['timestamp'], close_operation['timestamp'])
@@ -166,11 +158,10 @@ def dashboard():
 @app.route('/api/operations')
 def get_operations_api():
     current_time = datetime.now()
-    all_operations = load_operations()
     
     current_operations = []
 
-    for op in all_operations:
+    for op in operations:
         operation_time = parse_timestamp(op['timestamp'])
         if operation_time <= current_time:
             current_operations.append(op)
@@ -267,9 +258,6 @@ def clear_log():
 @app.route('/api/nfc_uids', methods=['GET', 'POST', 'DELETE', 'PATCH'])
 def manage_nfc_uids():
     if request.method == 'GET':
-        global ALLOWED_UIDS
-        ALLOWED_UIDS = load_nfc_uids()
-        
         return jsonify({
             "success": True,
             "uids": ALLOWED_UIDS
@@ -302,7 +290,6 @@ def manage_nfc_uids():
         }
         save_nfc_uids(ALLOWED_UIDS)
 
-        ALLOWED_UIDS = load_nfc_uids()
         return jsonify({"success": True, "message": "UID erfolgreich hinzugefügt"})
     
     elif request.method == 'PATCH':
@@ -325,7 +312,6 @@ def manage_nfc_uids():
         }
         save_nfc_uids(ALLOWED_UIDS)
 
-        ALLOWED_UIDS = load_nfc_uids()
         return jsonify({"success": True, "message": "UID erfolgreich aktualisiert"})
         
     elif request.method == 'DELETE':
@@ -341,7 +327,6 @@ def manage_nfc_uids():
         ALLOWED_UIDS.pop(uid)
         save_nfc_uids(ALLOWED_UIDS)
         
-        ALLOWED_UIDS = load_nfc_uids()
         return jsonify({"success": True, "message": "UID erfolgreich entfernt"})
 
 # API-Endpunkt für die NFC Datenverarbeitung des ESP32
